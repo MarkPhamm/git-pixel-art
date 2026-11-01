@@ -11,8 +11,8 @@ use std::collections::BTreeMap;
 use std::error::Error;
 use std::fmt;
 
-use crate::motion::FRAMES_PER_SECOND;
-use crate::render::{FRAME_HEIGHT_PIXELS, FRAME_WIDTH_PIXELS, KoiFrame};
+use crate::flow::FRAMES_PER_SECOND;
+use crate::render::{FRAME_HEIGHT_PIXELS, FRAME_WIDTH_PIXELS, Frame};
 
 /// Each native pixel becomes this many export pixels on each side.
 pub const STATIC_EXPORT_SCALE: u32 = 2;
@@ -24,8 +24,8 @@ pub const STATIC_HEIGHT_PIXELS: u32 = FRAME_HEIGHT_PIXELS * STATIC_EXPORT_SCALE;
 /// Encode a static PNG by repeating each native pixel in both dimensions.
 /// Preserve its color and alpha without interpolation, timestamps, I/O, or mutation.
 /// Encoding errors propagate before the caller publishes any resulting bytes.
-pub fn encode_png(koi_frame: &KoiFrame) -> Result<Vec<u8>, png::EncodingError> {
-    let native_pixels = koi_frame.as_rgba_bytes().as_chunks::<4>().0;
+pub fn encode_png(frame: &Frame) -> Result<Vec<u8>, png::EncodingError> {
+    let native_pixels = frame.as_rgba_bytes().as_chunks::<4>().0;
     let mut export_pixels = vec![[0; 4]; (STATIC_WIDTH_PIXELS * STATIC_HEIGHT_PIXELS) as usize];
     for (pixel_index, pixel_channels) in export_pixels.iter_mut().enumerate() {
         let native_x = pixel_index as u32 % STATIC_WIDTH_PIXELS / STATIC_EXPORT_SCALE;
@@ -47,11 +47,11 @@ pub fn encode_png(koi_frame: &KoiFrame) -> Result<Vec<u8>, png::EncodingError> {
 /// Equal neighboring pixels share a rectangle within their row. Transparent pixels
 /// are omitted; visible pixels retain their color and alpha. Identical frames produce
 /// identical documents without I/O, timestamps, external assets, or input mutation.
-pub fn encode_svg(koi_frame: &KoiFrame) -> String {
+pub fn encode_svg(frame: &Frame) -> String {
     let mut svg_document = format!(
         "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{STATIC_WIDTH_PIXELS}\" height=\"{STATIC_HEIGHT_PIXELS}\" viewBox=\"0 0 {FRAME_WIDTH_PIXELS} {FRAME_HEIGHT_PIXELS}\" shape-rendering=\"crispEdges\">\n"
     );
-    let native_pixels = koi_frame.as_rgba_bytes().as_chunks::<4>().0;
+    let native_pixels = frame.as_rgba_bytes().as_chunks::<4>().0;
     let mut pixel_index = 0;
     while pixel_index < native_pixels.len() {
         let pixel_channels = native_pixels[pixel_index];
@@ -81,7 +81,7 @@ const PREVIEW_HEAD: &str = r#"<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>git-koi preview</title>
+<title>git-lineage preview</title>
 <style>
   body { margin: 0; font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
   h1, h2 { margin: 0; font-size: 14px; font-weight: 600; }
@@ -99,22 +99,22 @@ const PREVIEW_PANELS: &str = r#"</h1></header>
 <section class="light">
 <h2>GitHub light</h2>
 <div class="images">
-<figure><img src="koi.gif" width="512" height="512" alt="The koi swimming"><figcaption>koi.gif</figcaption></figure>
-<figure><img src="koi.png" width="512" height="512" alt="The koi, still"><figcaption>koi.png</figcaption></figure>
+<figure><img src="lineage.gif" width="768" height="384" alt="The lineage graph running"><figcaption>lineage.gif</figcaption></figure>
+<figure><img src="lineage.png" width="768" height="384" alt="The lineage graph, still"><figcaption>lineage.png</figcaption></figure>
 </div>
 </section>
 <section class="dark">
 <h2>GitHub dark</h2>
 <div class="images">
-<figure><img src="koi.gif" width="512" height="512" alt="The koi swimming"><figcaption>koi.gif</figcaption></figure>
-<figure><img src="koi.png" width="512" height="512" alt="The koi, still"><figcaption>koi.png</figcaption></figure>
+<figure><img src="lineage.gif" width="768" height="384" alt="The lineage graph running"><figcaption>lineage.gif</figcaption></figure>
+<figure><img src="lineage.png" width="768" height="384" alt="The lineage graph, still"><figcaption>lineage.png</figcaption></figure>
 </div>
 </section>
 </body>
 </html>
 "#;
 
-/// Build a page that previews `koi.gif` and `koi.png`, read from beside it, on GitHub's
+/// Build a page that previews `lineage.gif` and `lineage.png`, read from beside it, on GitHub's
 /// light and dark page colors under the given caption. It draws nothing itself and loads
 /// no scripts or outside files, so it shows exactly what was generated.
 pub fn encode_preview_html(caption: &str) -> String {
@@ -132,15 +132,18 @@ const GIF_TRANSPARENT_INDEX: u8 = 0;
 /// Encode a seamless loop as an animated GIF at the static export size, repeating each
 /// native pixel in both dimensions. The GIF repeats forever at `FRAMES_PER_SECOND`; each
 /// delay, in hundredths of a second, is the step in a rounded running total, so a loop
-/// lasts exactly its frame count divided by the frame rate. Each frame stores only the
-/// box around its drawn pixels, with an exact palette of its colors, and that box clears
-/// before the next frame. Colors are never approximated: a frame with more than 255
-/// colors or a partly transparent pixel fails instead. Identical frames produce
-/// identical bytes without I/O, timestamps, or input mutation.
-pub fn encode_gif(koi_frames: &[KoiFrame]) -> Result<Vec<u8>, GifEncodingError> {
-    if koi_frames.is_empty() {
+/// lasts exactly its frame count divided by the frame rate. The first frame stores the
+/// box around its drawn pixels; every later frame stores only the box around the pixels
+/// that changed since the frame before, and leaves the rest of the canvas in place.
+/// Unchanged pixels inside a box are transparent, and each box has an exact palette of
+/// its changed colors. Colors are never approximated: a box with more than 255 colors,
+/// a partly transparent pixel, or a pixel that turns transparent after being drawn,
+/// including on the way from the last frame back to the first, fails instead.
+/// Identical frames produce identical bytes without I/O, timestamps, or input mutation.
+pub fn encode_gif(frames: &[Frame]) -> Result<Vec<u8>, GifEncodingError> {
+    let Some(last_frame) = frames.last() else {
         return Err(GifEncodingError::NoFrames);
-    }
+    };
     let mut gif_encoder = gif::Encoder::new(
         Vec::new(),
         STATIC_WIDTH_PIXELS as u16,
@@ -148,18 +151,35 @@ pub fn encode_gif(koi_frames: &[KoiFrame]) -> Result<Vec<u8>, GifEncodingError> 
         &[],
     )?;
     gif_encoder.set_repeat(gif::Repeat::Infinite)?;
-    for (frame_index, koi_frame) in koi_frames.iter().enumerate() {
-        let native_pixels = koi_frame.as_rgba_bytes().as_chunks::<4>().0;
-        let [box_left, box_top, box_width, box_height] = find_drawn_box(native_pixels);
+    let mut previous_pixels: Option<&[[u8; 4]]> = None;
+    for (frame_index, frame) in frames.iter().enumerate() {
+        let native_pixels = frame.as_rgba_bytes().as_chunks::<4>().0;
+        let wrapped_pixels =
+            previous_pixels.unwrap_or(last_frame.as_rgba_bytes().as_chunks::<4>().0);
+        if native_pixels
+            .iter()
+            .zip(wrapped_pixels)
+            .any(|(pixel, earlier_pixel)| pixel[3] == 0 && earlier_pixel[3] != 0)
+        {
+            return Err(GifEncodingError::ClearedPixel { frame_index });
+        }
+        let [box_left, box_top, box_width, box_height] = match previous_pixels {
+            None => find_drawn_box(native_pixels),
+            Some(earlier_pixels) => find_changed_box(earlier_pixels, native_pixels),
+        };
         let mut palette_indices: BTreeMap<[u8; 3], u8> = BTreeMap::new();
         let mut palette_channels = vec![0; 3];
         let mut native_indices = Vec::with_capacity((box_width * box_height) as usize);
         for native_y in box_top..box_top + box_height {
             for native_x in box_left..box_left + box_width {
-                let [red, green, blue, alpha] =
-                    native_pixels[(native_y * FRAME_WIDTH_PIXELS + native_x) as usize];
+                let pixel_offset = (native_y * FRAME_WIDTH_PIXELS + native_x) as usize;
+                let [red, green, blue, alpha] = native_pixels[pixel_offset];
+                let is_unchanged = previous_pixels.is_some_and(|earlier_pixels| {
+                    earlier_pixels[pixel_offset] == native_pixels[pixel_offset]
+                });
                 let palette_index = match alpha {
                     0 => GIF_TRANSPARENT_INDEX,
+                    255 if is_unchanged => GIF_TRANSPARENT_INDEX,
                     255 => match palette_indices.get(&[red, green, blue]) {
                         Some(&palette_index) => palette_index,
                         None if palette_indices.len() == GIF_COLOR_LIMIT => {
@@ -192,7 +212,7 @@ pub fn encode_gif(koi_frames: &[KoiFrame]) -> Result<Vec<u8>, GifEncodingError> 
         gif_encoder.write_frame(&gif::Frame {
             delay: calculate_elapsed_hundredths(frame_index + 1)
                 - calculate_elapsed_hundredths(frame_index),
-            dispose: gif::DisposalMethod::Background,
+            dispose: gif::DisposalMethod::Keep,
             transparent: Some(GIF_TRANSPARENT_INDEX),
             left: (box_left * STATIC_EXPORT_SCALE) as u16,
             top: (box_top * STATIC_EXPORT_SCALE) as u16,
@@ -202,8 +222,33 @@ pub fn encode_gif(koi_frames: &[KoiFrame]) -> Result<Vec<u8>, GifEncodingError> 
             buffer: Cow::Owned(export_indices),
             ..gif::Frame::default()
         })?;
+        previous_pixels = Some(native_pixels);
     }
     Ok(gif_encoder.into_inner()?)
+}
+
+/// The native box `[left, top, width, height]` around the pixels that differ between two
+/// frames; identical frames keep one unchanged pixel, since a GIF frame cannot be empty.
+fn find_changed_box(earlier_pixels: &[[u8; 4]], native_pixels: &[[u8; 4]]) -> [u32; 4] {
+    let mut changed_edges: Option<[u32; 4]> = None;
+    for (pixel_index, (pixel_channels, earlier_channels)) in
+        native_pixels.iter().zip(earlier_pixels).enumerate()
+    {
+        if pixel_channels == earlier_channels {
+            continue;
+        }
+        let pixel_x = pixel_index as u32 % FRAME_WIDTH_PIXELS;
+        let pixel_y = pixel_index as u32 / FRAME_WIDTH_PIXELS;
+        let [left, top, right, bottom] =
+            changed_edges.get_or_insert([pixel_x, pixel_y, pixel_x, pixel_y]);
+        *left = (*left).min(pixel_x);
+        *top = (*top).min(pixel_y);
+        *right = (*right).max(pixel_x);
+        *bottom = (*bottom).max(pixel_y);
+    }
+    changed_edges.map_or([0, 0, 1, 1], |[left, top, right, bottom]| {
+        [left, top, right + 1 - left, bottom + 1 - top]
+    })
 }
 
 /// The native box `[left, top, width, height]` around a frame's drawn pixels; a frame
@@ -250,6 +295,12 @@ pub enum GifEncodingError {
         /// The frame, counted from zero.
         frame_index: usize,
     },
+    /// A frame leaves transparent a pixel the frame before it drew, which a frame that
+    /// keeps the canvas cannot clear.
+    ClearedPixel {
+        /// The frame, counted from zero.
+        frame_index: usize,
+    },
     /// The GIF encoder failed; carries its own error.
     Encoder(gif::EncodingError),
 }
@@ -265,6 +316,10 @@ impl fmt::Display for GifEncodingError {
             Self::PartialTransparency { frame_index } => write!(
                 output_formatter,
                 "frame {frame_index} has partly transparent pixels, which a GIF cannot show"
+            ),
+            Self::ClearedPixel { frame_index } => write!(
+                output_formatter,
+                "frame {frame_index} clears pixels the frame before it drew, which this GIF cannot show"
             ),
             Self::Encoder(encoding_error) => {
                 write!(output_formatter, "GIF encoding failed: {encoding_error}")
@@ -295,12 +350,12 @@ mod tests {
     const FRAME_PIXEL_COUNT: usize = (FRAME_WIDTH_PIXELS * FRAME_HEIGHT_PIXELS) as usize;
 
     /// A frame with one opaque pixel of each given color, in reading order.
-    fn frame_with_colors(colors: impl IntoIterator<Item = [u8; 4]>) -> KoiFrame {
+    fn frame_with_colors(colors: impl IntoIterator<Item = [u8; 4]>) -> Frame {
         let mut rgba_pixels = vec![[0; 4]; FRAME_PIXEL_COUNT];
         for (pixel_channels, color) in rgba_pixels.iter_mut().zip(colors) {
             *pixel_channels = color;
         }
-        KoiFrame::from_rgba_pixels(rgba_pixels)
+        Frame::from_rgba_pixels(rgba_pixels)
     }
 
     fn distinct_colors(color_count: u32) -> impl Iterator<Item = [u8; 4]> {
@@ -319,11 +374,11 @@ mod tests {
     #[test]
     fn whole_loops_last_exactly_their_frames_at_fifteen_per_second() {
         for (loop_frame_count, loop_hundredths) in [(120, 800), (90, 600)] {
-            let koi_frames: Vec<KoiFrame> = (0..loop_frame_count)
+            let frames: Vec<Frame> = (0..loop_frame_count)
                 .map(|_| frame_with_colors(distinct_colors(1)))
                 .collect();
             assert_eq!(
-                total_hundredths(&encode_gif(&koi_frames).unwrap()),
+                total_hundredths(&encode_gif(&frames).unwrap()),
                 loop_hundredths
             );
         }
@@ -332,9 +387,12 @@ mod tests {
     #[test]
     fn a_frame_may_use_every_palette_color_but_no_more() {
         assert!(encode_gif(&[frame_with_colors(distinct_colors(255))]).is_ok());
+        // Both frames draw the same 256 pixels, so only the colors can fail.
         let crowded_frames = [
-            frame_with_colors(distinct_colors(1)),
-            frame_with_colors(distinct_colors(256)),
+            frame_with_colors(distinct_colors(255).chain([[0, 0, 7, 255]])),
+            frame_with_colors(
+                distinct_colors(256).map(|[red, green, _, alpha]| [red, green, 9, alpha]),
+            ),
         ];
         assert!(matches!(
             encode_gif(&crowded_frames),
@@ -347,6 +405,26 @@ mod tests {
         assert!(matches!(
             encode_gif(&[frame_with_colors([[200, 100, 50, 128]])]),
             Err(GifEncodingError::PartialTransparency { frame_index: 0 })
+        ));
+    }
+
+    #[test]
+    fn a_pixel_cannot_turn_transparent_after_being_drawn_even_across_the_loop() {
+        let growing_frames = [
+            frame_with_colors(distinct_colors(1)),
+            frame_with_colors(distinct_colors(2)),
+        ];
+        assert!(matches!(
+            encode_gif(&growing_frames),
+            Err(GifEncodingError::ClearedPixel { frame_index: 0 })
+        ));
+        let shrinking_frames = [
+            frame_with_colors(distinct_colors(2)),
+            frame_with_colors(distinct_colors(1)),
+        ];
+        assert!(matches!(
+            encode_gif(&shrinking_frames),
+            Err(GifEncodingError::ClearedPixel { frame_index: 1 })
         ));
     }
 

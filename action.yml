@@ -1,23 +1,20 @@
-name: git-profile-koi
+name: git-profile-lineage
 description:
-  Draw a GitHub account's koi from its public activity as a looping GIF, a still
-  PNG, and a preview, for a profile README.
+  Draw a GitHub account's activity as a living dbt lineage graph, a looping GIF
+  plus a still PNG and SVG, for a profile README.
 branding:
-  icon: droplet
+  icon: git-merge
   color: blue
 
 inputs:
   login:
-    description: Account whose koi to draw.
+    description: Account whose lineage graph to draw.
     default: ${{ github.repository_owner }}
-  body:
-    description: Body color, one of white, black, asagi, tea, gold, or platinum.
-    default: white
   output-dir:
     description:
-      Folder, relative to the workspace, that receives koi.gif, koi.png, and
-      preview.html.
-    default: koi
+      Folder, relative to the workspace, that receives lineage.gif, lineage.png,
+      lineage.svg, and preview.html.
+    default: lineage
   token:
     description:
       Token for reading the account's public data; the built-in token is enough.
@@ -26,7 +23,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Download the git-koi release this Action belongs to
+    - name: Download the git-lineage release this Action belongs to
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.token }}
@@ -39,12 +36,12 @@ runs:
           macOS-X64) target=x86_64-apple-darwin ;;
           macOS-ARM64) target=aarch64-apple-darwin ;;
           *)
-            echo "git-koi has no build for $RUNNER_OS $RUNNER_ARCH; use ubuntu-latest" >&2
+            echo "git-lineage has no build for $RUNNER_OS $RUNNER_ARCH; use ubuntu-latest" >&2
             exit 1
             ;;
         esac
-        archive="git-koi-$version-$target.tar.gz"
-        install_dir="$RUNNER_TEMP/git-koi"
+        archive="git-lineage-$version-$target.tar.gz"
+        install_dir="$RUNNER_TEMP/git-lineage"
         mkdir -p "$install_dir"
         if ! gh release download "v$version" --repo "$repository" --dir "$install_dir" \
             --pattern "$archive" --pattern "$archive.sha256"; then
@@ -58,19 +55,19 @@ runs:
           shasum -a 256 -c "$archive.sha256"
         fi
         tar -xzf "$archive"
-        echo "$install_dir/git-koi-$version-$target" >> "$GITHUB_PATH"
+        echo "$install_dir/git-lineage-$version-$target" >> "$GITHUB_PATH"
     - name: Collect the account snapshot
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.token }}
-        KOI_LOGIN: ${{ inputs.login }}
+        LINEAGE_LOGIN: ${{ inputs.login }}
       run:
-        git-koi collect "$KOI_LOGIN" --output "$RUNNER_TEMP/koi-snapshot.json"
-    - name: Render the koi
+        git-lineage collect "$LINEAGE_LOGIN" --output
+        "$RUNNER_TEMP/lineage-snapshot.json"
+    - name: Render the lineage graph
       shell: bash
       env:
-        KOI_BODY: ${{ inputs.body }}
-        KOI_OUTPUT_DIR: ${{ inputs.output-dir }}
+        LINEAGE_OUTPUT_DIR: ${{ inputs.output-dir }}
       run:
-        git-koi render "$RUNNER_TEMP/koi-snapshot.json" --output-dir
-        "$KOI_OUTPUT_DIR" --body "$KOI_BODY"
+        git-lineage render "$RUNNER_TEMP/lineage-snapshot.json" --output-dir
+        "$LINEAGE_OUTPUT_DIR"

@@ -1,16 +1,16 @@
 use chrono::{Days, NaiveDate};
-use git_koi::behavior::{Behavior, select_behavior};
-use git_koi::history::{AccountSnapshot, ContributionDay, ContributionHistory};
-use git_koi::koi::{KoiDevelopment, derive_koi_development};
+use git_lineage::behavior::{Behavior, select_behavior};
+use git_lineage::development::{PipelineDevelopment, derive_pipeline_development};
+use git_lineage::history::{AccountSnapshot, ContributionDay, ContributionHistory};
 
 #[test]
-fn quiet_days_bring_rest_then_deep_rest() {
+fn quiet_days_bring_idle_then_paused() {
     let steady_weeks = vec![1; 20 * 7];
     for (quiet_day_count, expected_behavior) in [
-        (13, Behavior::Cruise),
-        (14, Behavior::Rest),
-        (59, Behavior::Rest),
-        (60, Behavior::DeepRest),
+        (13, Behavior::Batch),
+        (14, Behavior::Idle),
+        (59, Behavior::Idle),
+        (60, Behavior::Paused),
     ] {
         let daily_counts = [steady_weeks.clone(), vec![0; quiet_day_count]].concat();
         assert_eq!(
@@ -22,21 +22,21 @@ fn quiet_days_bring_rest_then_deep_rest() {
 }
 
 #[test]
-fn the_first_contribution_of_a_week_brings_surface_feeding() {
+fn the_first_contribution_of_a_week_brings_ingest() {
     let steady_weeks = vec![1; 20 * 7];
     let behavior_after = |week_so_far: &[u32]| {
         select_behavior(&develop_from_daily_counts(
             &[steady_weeks.clone(), week_so_far.to_vec()].concat(),
         ))
     };
-    assert_eq!(behavior_after(&[5]), Behavior::SurfaceFeeding);
-    assert_eq!(behavior_after(&[0, 0, 3]), Behavior::SurfaceFeeding);
-    assert_eq!(behavior_after(&[0, 0, 3, 1]), Behavior::Cruise);
-    assert_eq!(behavior_after(&[0, 0, 3, 0]), Behavior::Cruise);
+    assert_eq!(behavior_after(&[5]), Behavior::Ingest);
+    assert_eq!(behavior_after(&[0, 0, 3]), Behavior::Ingest);
+    assert_eq!(behavior_after(&[0, 0, 3, 1]), Behavior::Batch);
+    assert_eq!(behavior_after(&[0, 0, 3, 0]), Behavior::Batch);
 }
 
 #[test]
-fn only_a_finished_week_that_stands_out_darts() {
+fn only_a_finished_week_that_stands_out_streams() {
     let behavior_after = |earlier_week_totals: &[u32], finished_week: &[u32]| {
         let mut daily_counts = Vec::new();
         for &week_total in earlier_week_totals {
@@ -49,25 +49,25 @@ fn only_a_finished_week_that_stands_out_darts() {
     let finished_week = |week_total: u32| [week_total - 1, 0, 0, 0, 0, 0, 1];
     assert_eq!(
         behavior_after(&ranked_weeks, &finished_week(19)),
-        Behavior::Dart
+        Behavior::Streaming
     );
     assert_eq!(
         behavior_after(&ranked_weeks, &finished_week(18)),
-        Behavior::Cruise
+        Behavior::Batch
     );
     assert_eq!(
         behavior_after(&ranked_weeks, &finished_week(100)),
-        Behavior::Dart
+        Behavior::Streaming
     );
     // Judged on Saturday, the week has not finished.
     assert_eq!(
         behavior_after(&ranked_weeks, &finished_week(100)[..6]),
-        Behavior::Cruise
+        Behavior::Batch
     );
-    assert_eq!(behavior_after(&[7; 20], &[1; 7]), Behavior::Cruise);
+    assert_eq!(behavior_after(&[7; 20], &[1; 7]), Behavior::Batch);
     assert_eq!(
         behavior_after(&ranked_weeks[..9], &finished_week(100)),
-        Behavior::Cruise
+        Behavior::Batch
     );
 }
 
@@ -83,41 +83,38 @@ fn a_busy_week_is_compared_with_the_last_52_weeks_only() {
     daily_counts.extend([59, 0, 0, 0, 0, 0, 1]);
     assert_eq!(
         select_behavior(&develop_from_daily_counts(&daily_counts)),
-        Behavior::Dart
+        Behavior::Streaming
     );
 }
 
 #[test]
-fn surface_feeding_comes_before_darting() {
+fn ingest_comes_before_streaming() {
     let ranked_weeks: Vec<u32> = (1..=20)
         .flat_map(|week_total| [0, 0, week_total, 0, 0, 0, 0])
         .collect();
     let busy_week_starting_sunday = [ranked_weeks, vec![0, 0, 0, 0, 0, 0, 100]].concat();
     assert_eq!(
         select_behavior(&develop_from_daily_counts(&busy_week_starting_sunday)),
-        Behavior::SurfaceFeeding
+        Behavior::Ingest
     );
     let busy_weeks = vec![7; 20 * 7];
     let milestone_on_monday = [busy_weeks, vec![30]].concat();
     let milestone_development = develop_from_daily_counts(&milestone_on_monday);
     assert_eq!(milestone_development.total_contributions, 1_010);
-    assert_eq!(
-        select_behavior(&milestone_development),
-        Behavior::SurfaceFeeding
-    );
+    assert_eq!(select_behavior(&milestone_development), Behavior::Ingest);
 }
 
 #[test]
-fn crossing_a_milestone_darts_for_a_week() {
+fn crossing_a_milestone_streams_for_a_week() {
     let busy_weeks = vec![7; 20 * 7];
     let crossing_week = [busy_weeks.clone(), vec![3; 7]].concat();
     let crossing_development = develop_from_daily_counts(&crossing_week);
     assert_eq!(crossing_development.total_contributions, 1_001);
-    assert_eq!(select_behavior(&crossing_development), Behavior::Dart);
+    assert_eq!(select_behavior(&crossing_development), Behavior::Streaming);
     let week_after = [crossing_week, vec![3; 7]].concat();
     assert_eq!(
         select_behavior(&develop_from_daily_counts(&week_after)),
-        Behavior::Cruise
+        Behavior::Batch
     );
 }
 
@@ -129,9 +126,9 @@ fn quiet_days_change_behavior_only_at_the_thresholds_and_nothing_else() {
         let quiet_development =
             develop_from_daily_counts(&[steady_weeks.clone(), vec![0; quiet_day_count]].concat());
         let expected_behavior = match quiet_day_count {
-            0..14 => Behavior::Cruise,
-            14..60 => Behavior::Rest,
-            _ => Behavior::DeepRest,
+            0..14 => Behavior::Batch,
+            14..60 => Behavior::Idle,
+            _ => Behavior::Paused,
         };
         assert_eq!(
             select_behavior(&quiet_development),
@@ -155,12 +152,12 @@ fn quiet_days_change_behavior_only_at_the_thresholds_and_nothing_else() {
     let returning_counts = [steady_weeks, vec![0; 70], vec![5]].concat();
     assert_eq!(
         select_behavior(&develop_from_daily_counts(&returning_counts)),
-        Behavior::SurfaceFeeding
+        Behavior::Ingest
     );
 }
 
 /// Daily counts from a Monday, observed on the last day.
-fn develop_from_daily_counts(daily_counts: &[u32]) -> KoiDevelopment {
+fn develop_from_daily_counts(daily_counts: &[u32]) -> PipelineDevelopment {
     let first_monday: NaiveDate = "2025-01-06".parse().unwrap();
     let mut account_snapshot: AccountSnapshot =
         serde_json::from_str(include_str!("fixtures/account-with-history.json")).unwrap();
@@ -176,5 +173,5 @@ fn develop_from_daily_counts(daily_counts: &[u32]) -> KoiDevelopment {
         observed_on: contribution_days.last().unwrap().date,
         days: contribution_days,
     });
-    derive_koi_development(&account_snapshot).unwrap()
+    derive_pipeline_development(&account_snapshot).unwrap()
 }

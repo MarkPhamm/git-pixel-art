@@ -1,14 +1,13 @@
 [package]
-name = "git-koi"
-version = "1.0.2"
+name = "git-lineage"
+version = "2.0.0"
 edition = "2024"
 rust-version = "1.88"
-description = "Draw a pixel-art koi from a GitHub account's public activity, as a looping GIF for a profile README."
-repository = "https://github.com/yalongwastaken/git-koi"
-documentation = "https://docs.rs/git-koi"
+description = "Draw a living pixel-art dbt lineage graph from a GitHub account's public activity, as a looping GIF for a profile README."
+repository = "https://github.com/MarkPhamm/git-pixel-art"
 readme = "README.md"
 license = "MIT"
-keywords = ["github", "profile", "koi", "pixel-art", "gif"]
+keywords = ["github", "profile", "dbt", "pixel-art", "gif"]
 categories = ["command-line-utilities", "visualization"]
 exclude = ["/.github", "/docs"]
 

@@ -4,16 +4,15 @@ use std::fs;
 use std::process::Command;
 
 use chrono::{Datelike, Days, NaiveDate, Weekday};
-use git_koi::coat::KoiBody;
-use git_koi::collect::{CollectionError, GraphqlClient, collect_account_snapshot};
-use git_koi::history::{
+use git_lineage::collect::{CollectionError, GraphqlClient, collect_account_snapshot};
+use git_lineage::development::derive_pipeline_development;
+use git_lineage::history::{
     ContributionHistoryError, LanguageColor, calculate_language_shares, summarize_contributions,
 };
-use git_koi::koi::derive_koi_development;
-use git_koi::render::render_koi;
+use git_lineage::render::render_still;
 use serde_json::{Value, json};
 
-const LOGIN: &str = "synthetic-koi";
+const LOGIN: &str = "synthetic-lineage";
 
 #[test]
 fn collected_snapshot_covers_every_page_and_day_and_renders() {
@@ -44,16 +43,9 @@ fn collected_snapshot_covers_every_page_and_day_and_renders() {
         .sum();
     assert_eq!(contribution_summary.total_contributions, expected_total);
 
-    let koi_frame = render_koi(
-        &derive_koi_development(&account_snapshot).unwrap(),
-        KoiBody::default(),
-    );
-    assert!(
-        koi_frame
-            .as_rgba_bytes()
-            .chunks(4)
-            .any(|pixel| pixel[3] != 0)
-    );
+    let still_frame = render_still(&derive_pipeline_development(&account_snapshot).unwrap());
+    let still_pixels = still_frame.as_rgba_bytes().as_chunks::<4>().0;
+    assert!(still_pixels.iter().any(|pixel| *pixel != still_pixels[0]));
 }
 
 #[test]
@@ -231,11 +223,11 @@ fn command_line_usage_errors_exit_two_and_help_exits_zero() {
         &["collect", "--output", "x"],
         &["render"],
     ] {
-        let command_output = run_git_koi(invalid_arguments, None);
+        let command_output = run_git_lineage(invalid_arguments, None);
         assert_eq!(command_output.status.code(), Some(2));
         assert!(String::from_utf8_lossy(&command_output.stderr).starts_with("Usage:"));
     }
-    let help_output = run_git_koi(&["--help"], None);
+    let help_output = run_git_lineage(&["--help"], None);
     assert_eq!(help_output.status.code(), Some(0));
     assert!(String::from_utf8_lossy(&help_output.stdout).contains("GH_TOKEN"));
 }
@@ -249,7 +241,7 @@ fn collection_failure_exits_one_and_keeps_the_previous_snapshot() {
     let output_path = scratch_directory.join("snapshot.json");
     fs::write(&output_path, "previous snapshot\n").unwrap();
 
-    let command_output = run_git_koi(
+    let command_output = run_git_lineage(
         &[
             "collect",
             "octocat",
@@ -376,11 +368,11 @@ fn date(text: &str) -> NaiveDate {
     NaiveDate::parse_from_str(text, "%Y-%m-%d").unwrap()
 }
 
-fn run_git_koi(arguments: &[&str], path_override: Option<&str>) -> std::process::Output {
-    let mut git_koi = Command::new(env!("CARGO_BIN_EXE_git-koi"));
-    git_koi.args(arguments);
+fn run_git_lineage(arguments: &[&str], path_override: Option<&str>) -> std::process::Output {
+    let mut git_lineage = Command::new(env!("CARGO_BIN_EXE_git-lineage"));
+    git_lineage.args(arguments);
     if let Some(path_override) = path_override {
-        git_koi.env("PATH", path_override);
+        git_lineage.env("PATH", path_override);
     }
-    git_koi.output().unwrap()
+    git_lineage.output().unwrap()
 }

@@ -6,6 +6,27 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-11-01
+
+### Changed
+
+- The koi is replaced by a living dbt lineage graph, and the crate, command, and
+  Action are renamed `git-lineage`, `git-lineage`, and `git-profile-lineage`.
+  Languages become source nodes, contributions grow staging, intermediate, and
+  mart layers, and the day's activity sends packets through the pipes: batch,
+  streaming, ingest, idle, or paused.
+- Streaks show as "tests passed" badges and a green glow on the marts instead of
+  koi markings.
+- `render` writes `lineage.gif`, `lineage.png`, `lineage.svg`, and
+  `preview.html` on a 384 by 192 banner canvas, and no longer takes `--body`.
+- GIF frames after the first store only what changed since the frame before,
+  which keeps an opaque canvas small.
+
+### Removed
+
+- Koi bodies, coats, markings, and swimming motion, and the koi library example,
+  which the lineage gallery replaces.
+
 ## [1.0.2] - 2026-10-31
 
 ### Fixed
@@ -34,7 +55,8 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The `git-koi` library: account history, koi development, behavior, motion,
   markings, rendering, and encoding.
 
-[Unreleased]: https://github.com/yalongwastaken/git-koi/compare/v1.0.2...HEAD
+[Unreleased]: https://github.com/MarkPhamm/git-pixel-art/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/MarkPhamm/git-pixel-art/compare/v1.0.2...v2.0.0
 [1.0.2]: https://github.com/yalongwastaken/git-koi/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/yalongwastaken/git-koi/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/yalongwastaken/git-koi/releases/tag/v1.0.0
