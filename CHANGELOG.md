@@ -6,6 +6,8 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-11-01
+
 ### Changed
 
 - The lineage graph uses a darker night palette. Language sources keep their hue
@@ -61,7 +63,8 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The `git-koi` library: account history, koi development, behavior, motion,
   markings, rendering, and encoding.
 
-[Unreleased]: https://github.com/MarkPhamm/git-pixel-art/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/MarkPhamm/git-pixel-art/compare/v2.0.1...HEAD
+[2.0.1]: https://github.com/MarkPhamm/git-pixel-art/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/MarkPhamm/git-pixel-art/compare/v1.0.2...v2.0.0
 [1.0.2]: https://github.com/yalongwastaken/git-koi/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/yalongwastaken/git-koi/compare/v1.0.0...v1.0.1
