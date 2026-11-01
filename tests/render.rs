@@ -5,7 +5,7 @@ use git_lineage::behavior::Behavior;
 use git_lineage::development::{PipelineDevelopment, RecentStreak, derive_pipeline_development};
 use git_lineage::flow::frame_count;
 use git_lineage::history::{AccountSnapshot, ContributionWeek, LanguageColor};
-use git_lineage::palette::{BACKGROUND, CURSOR, TEST_PASS};
+use git_lineage::palette::{BACKGROUND, CURSOR, TEST_PASS, settle_into_night};
 use git_lineage::render::{
     FRAME_HEIGHT_PIXELS, FRAME_WIDTH_PIXELS, Frame, render_flow_frame, render_still,
 };
@@ -51,18 +51,21 @@ fn rendering_is_reproducible_and_loops_wrap() {
 #[test]
 fn sources_wear_their_language_colors_until_the_graph_pauses() {
     let development = develop(20_000, 4, None);
-    assert!(has_color(&render_still(&development), PYTHON_BLUE));
+    let night_blue = settle_into_night(PYTHON_BLUE);
+    assert_ne!(night_blue, PYTHON_BLUE);
+    assert!(has_color(&render_still(&development), night_blue));
     assert!(has_color(
         &render_flow_frame(&development, Behavior::Batch, 0),
-        PYTHON_BLUE
+        night_blue
     ));
+    assert!(!has_color(&render_still(&development), PYTHON_BLUE));
     let paused_frames: Vec<Frame> = (0..frame_count(Behavior::Paused))
         .map(|frame_index| render_flow_frame(&development, Behavior::Paused, frame_index))
         .collect();
     assert!(
         paused_frames
             .iter()
-            .all(|frame| !has_color(frame, PYTHON_BLUE))
+            .all(|frame| !has_color(frame, PYTHON_BLUE) && !has_color(frame, night_blue))
     );
     assert!(paused_frames.iter().any(|frame| has_color(frame, CURSOR)));
     assert!(paused_frames.iter().any(|frame| !has_color(frame, CURSOR)));

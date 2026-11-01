@@ -90,7 +90,7 @@ fn the_svg_draws_the_still_at_the_export_size() {
     assert!(svg_document.starts_with(&format!(
         "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{STATIC_WIDTH_PIXELS}\" height=\"{STATIC_HEIGHT_PIXELS}\""
     )));
-    assert!(svg_document.contains("fill=\"#0b0f19\""));
+    assert!(svg_document.contains("fill=\"#070a12\""));
     assert!(svg_document.trim_end().ends_with("</svg>"));
 }
 

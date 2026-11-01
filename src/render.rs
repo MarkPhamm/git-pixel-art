@@ -1,5 +1,5 @@
 //! A pixel-art dbt lineage graph colored from the account's languages, on an opaque
-//! Tokyo Night canvas.
+//! night-blue canvas.
 //!
 //! Sources are drawn as database blocks in their language colors, models as dark cards
 //! with a stripe in the color of the source they read from, and pipes in a tint of the
@@ -19,6 +19,7 @@ use crate::layout::{DagLayout, Layer, layout_dag};
 use crate::palette::{
     ACCENT, BACKGROUND, CURSOR, GRID_DOT, LABEL, NODE_BORDER, NODE_FILL, NODE_HIGHLIGHT,
     NODE_SHADOW, PIPE, Rgb, TEST_PASS, apply_vibrancy, darken, dim, language_rgb, lighten, mix,
+    settle_into_night,
 };
 
 /// Width of the native canvas every graph is drawn on, at every growth level.
@@ -150,7 +151,12 @@ fn draw_graph(layout: &DagLayout, badges: &StreakBadges, flow: &FlowState) -> Fr
     let lineage_colors: Vec<Rgb> = layout
         .sources
         .iter()
-        .map(|source| apply_vibrancy(language_rgb(source.color), badges.color_vibrancy))
+        .map(|source| {
+            settle_into_night(apply_vibrancy(
+                language_rgb(source.color),
+                badges.color_vibrancy,
+            ))
+        })
         .collect();
 
     for edge in &layout.edges {
@@ -172,7 +178,7 @@ fn draw_graph(layout: &DagLayout, badges: &StreakBadges, flow: &FlowState) -> Fr
         if node.layer == Layer::Source {
             let body = lighten(lineage_color, flow.source_pulse * 0.5);
             canvas.fill_rect(node.rect, body);
-            canvas.fill_rect([x, y, width, 1], lighten(body, 0.25));
+            canvas.fill_rect([x, y, width, 1], lighten(body, 0.125));
             canvas.fill_rect([x, y + 3, width, 1], darken(body, 0.25));
             canvas.fill_rect([x, y + height - 1, width, 1], darken(body, 0.5));
             continue;

@@ -1,5 +1,5 @@
-//! The colors the lineage graph is drawn in: a Tokyo Night theme around GitHub's
-//! language colors.
+//! The colors the lineage graph is drawn in: a night-room blue around GitHub's
+//! language colors, pulled down so they sit in the dark instead of glowing.
 //!
 //! Every blend rounds its amount to a few fixed steps, so a frame keeps a small, exact
 //! set of colors that one GIF palette holds.
@@ -9,30 +9,30 @@ use crate::history::LanguageColor;
 /// One opaque color, as red, green, and blue channels.
 pub type Rgb = [u8; 3];
 
-/// The canvas behind everything.
-pub const BACKGROUND: Rgb = [0x0b, 0x0f, 0x19];
+/// The canvas behind everything, near the darkest blue of the night scene.
+pub const BACKGROUND: Rgb = [0x07, 0x0a, 0x12];
 /// The faint dot grid on the canvas.
-pub const GRID_DOT: Rgb = [0x16, 0x1c, 0x2c];
+pub const GRID_DOT: Rgb = [0x12, 0x17, 0x24];
 /// A pipe before it takes on its lineage's tint.
-pub const PIPE: Rgb = [0x2a, 0x31, 0x50];
+pub const PIPE: Rgb = [0x1e, 0x27, 0x3c];
 /// The body of a model node.
-pub const NODE_FILL: Rgb = [0x1a, 0x21, 0x33];
+pub const NODE_FILL: Rgb = [0x12, 0x18, 0x26];
 /// A model node's outline.
-pub const NODE_BORDER: Rgb = [0x3b, 0x42, 0x61];
+pub const NODE_BORDER: Rgb = [0x2a, 0x34, 0x4c];
 /// The lit top row of a node.
-pub const NODE_HIGHLIGHT: Rgb = [0x41, 0x48, 0x68];
+pub const NODE_HIGHLIGHT: Rgb = [0x32, 0x3c, 0x56];
 /// The shaded bottom row of a node.
-pub const NODE_SHADOW: Rgb = [0x10, 0x14, 0x1f];
-/// The profile's accent, used for flashing marts.
-pub const ACCENT: Rgb = [0x88, 0xc0, 0xd0];
-/// Passing tests.
-pub const TEST_PASS: Rgb = [0x9e, 0xce, 0x6a];
+pub const NODE_SHADOW: Rgb = [0x08, 0x0c, 0x14];
+/// The monitor cyan, used for flashing marts.
+pub const ACCENT: Rgb = [0x6a, 0x96, 0xa6];
+/// Passing tests, at the brightness of the room's plants.
+pub const TEST_PASS: Rgb = [0x6e, 0x8f, 0x4e];
 /// Layer labels.
-pub const LABEL: Rgb = [0x56, 0x5f, 0x89];
+pub const LABEL: Rgb = [0x45, 0x50, 0x68];
 /// The paused cursor.
-pub const CURSOR: Rgb = [0xc0, 0xca, 0xf5];
+pub const CURSOR: Rgb = [0xa8, 0xb4, 0xd0];
 /// A language GitHub gives no color, and the source of an account with no language.
-pub const UNCOLORED_LANGUAGE: Rgb = [0x8b, 0x94, 0x9e];
+pub const UNCOLORED_LANGUAGE: Rgb = [0x6a, 0x73, 0x84];
 
 const WHITE: Rgb = [0xff; 3];
 /// Blend amounts round to this many steps between the two colors.
@@ -46,9 +46,20 @@ const VIVID_SATURATION_GAIN: f64 = 0.35;
 /// A dimmed color turns grey at this share of its brightness.
 const DIM_BRIGHTNESS: f64 = 0.55;
 
+/// The night room's wall. Language colors lean toward it, which drops both brightness
+/// and saturation without giving every source the same hue.
+const NIGHT_WALL: Rgb = [0x24, 0x30, 0x44];
+const NIGHT_DARKEN: f64 = 0.25;
+const NIGHT_WALL_MIX: f64 = 0.5;
+
 /// A language's color, or [`UNCOLORED_LANGUAGE`] for a language without one.
 pub fn language_rgb(language_color: Option<LanguageColor>) -> Rgb {
     language_color.map_or(UNCOLORED_LANGUAGE, |LanguageColor(channels)| channels)
+}
+
+/// Pull a color into the night scene so a source reads as a dim block, not a lamp.
+pub fn settle_into_night(color: Rgb) -> Rgb {
+    mix(darken(color, NIGHT_DARKEN), NIGHT_WALL, NIGHT_WALL_MIX)
 }
 
 /// Blend from one color toward another; the amount, from zero through one, rounds to

@@ -6,6 +6,12 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- The lineage graph uses a darker night palette. Language sources keep their hue
+  and drop to the brightness of the room, and the canvas, pipes, and badges
+  follow.
+
 ## [2.0.0] - 2026-11-01
 
 ### Changed
